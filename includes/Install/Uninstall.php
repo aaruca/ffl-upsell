@@ -6,7 +6,11 @@ defined('ABSPATH') || exit;
 
 class Uninstall {
     public static function uninstall(): void {
-        if (defined('FFL_UPSELL_DROP_TABLE_ON_UNINSTALL') && FFL_UPSELL_DROP_TABLE_ON_UNINSTALL) {
+        // Check if user wants to delete the table via UI option or wp-config constant
+        $delete_table = get_option('fflu_delete_table_on_uninstall', 0);
+        $delete_via_constant = defined('FFL_UPSELL_DROP_TABLE_ON_UNINSTALL') && FFL_UPSELL_DROP_TABLE_ON_UNINSTALL;
+
+        if ($delete_table || $delete_via_constant) {
             self::drop_table();
         }
 
@@ -28,6 +32,7 @@ class Uninstall {
             'fflu_cache_ttl',
             'fflu_batch_size',
             'fflu_cron_enabled',
+            'fflu_delete_table_on_uninstall',
         ];
 
         foreach ($options as $option) {

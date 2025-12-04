@@ -79,6 +79,14 @@ class SettingsPage {
             },
         ]);
 
+        register_setting('fflu_settings', 'fflu_delete_table_on_uninstall', [
+            'type' => 'boolean',
+            'default' => 0,
+            'sanitize_callback' => function ($value) {
+                return $value ? 1 : 0;
+            },
+        ]);
+
         add_settings_section(
             'fflu_main_section',
             __('Relation Builder Settings', 'ffl-upsell'),
@@ -130,6 +138,14 @@ class SettingsPage {
             'fflu_cron_enabled',
             __('Enable Daily Cron', 'ffl-upsell'),
             [$this, 'render_cron_enabled_field'],
+            'fflu_settings',
+            'fflu_main_section'
+        );
+
+        add_settings_field(
+            'fflu_delete_table_on_uninstall',
+            __('Delete Data on Uninstall', 'ffl-upsell'),
+            [$this, 'render_delete_table_field'],
             'fflu_settings',
             'fflu_main_section'
         );
@@ -250,5 +266,15 @@ class SettingsPage {
         $value = get_option('fflu_cron_enabled', 1);
         echo '<input type="checkbox" name="fflu_cron_enabled" value="1" ' . checked($value, 1, false) . ' />';
         echo '<label>' . esc_html__('Enable automatic daily rebuild via WP-Cron.', 'ffl-upsell') . '</label>';
+    }
+
+    public function render_delete_table_field(): void {
+        $value = get_option('fflu_delete_table_on_uninstall', 0);
+        echo '<input type="checkbox" name="fflu_delete_table_on_uninstall" value="1" ' . checked($value, 1, false) . ' id="fflu_delete_table" />';
+        echo '<label for="fflu_delete_table">' . esc_html__('Delete relations table and all data when uninstalling the plugin.', 'ffl-upsell') . '</label>';
+        echo '<p class="description" style="color: #d63638;">';
+        echo '<strong>' . esc_html__('Warning:', 'ffl-upsell') . '</strong> ';
+        echo esc_html__('Enabling this option will permanently delete all product relations when you uninstall the plugin. This action cannot be undone.', 'ffl-upsell');
+        echo '</p>';
     }
 }

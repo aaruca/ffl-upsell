@@ -3,7 +3,7 @@
  * Plugin Name: FFL Upsell
  * Plugin URI: https://github.com/aaruca/ffl-upsell
  * Description: Fast related products powered by a precomputed relation table, Bricks-ready.
- * Version: 1.0.5
+ * Version: 1.1.0
  * Author: Ale Aruca
  * Author URI: https://alearuca.com
  * Text Domain: ffl-upsell
@@ -20,7 +20,7 @@ namespace FFL\Upsell;
 
 defined('ABSPATH') || exit;
 
-define('FFL_UPSELL_VERSION', '1.0.5');
+define('FFL_UPSELL_VERSION', '1.1.0');
 define('FFL_UPSELL_PLUGIN_FILE', __FILE__);
 define('FFL_UPSELL_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('FFL_UPSELL_PLUGIN_URL', plugin_dir_url(__FILE__));
