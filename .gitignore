@@ -1,0 +1,10 @@
+composer.lock
+composer.phar
+vendor/
+.DS_Store
+node_modules/
+*.log
+.vscode/
+.idea/
+.claude/
+.claude-*

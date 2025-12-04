@@ -1,0 +1,2 @@
+# Translation files (.po, .mo) go here
+# Generate POT file with: wp i18n make-pot . languages/ffl-upsell.pot

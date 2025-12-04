@@ -1,0 +1,25 @@
+{
+  "name": "alearuca/ffl-upsell",
+  "description": "Fast related products powered by a precomputed relation table, Bricks-ready.",
+  "type": "wordpress-plugin",
+  "license": "GPL-2.0-or-later",
+  "authors": [
+    {
+      "name": "Ale Aruca",
+      "email": "ale@alearuca.com"
+    }
+  ],
+  "require": {
+    "php": ">=8.0",
+    "yahnis-elsts/plugin-update-checker": "^5.6"
+  },
+  "autoload": {
+    "psr-4": {
+      "FFL\\Upsell\\": "includes/"
+    }
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "sort-packages": true
+  }
+}
