@@ -1,0 +1,297 @@
+@import "tailwindcss";
+
+/* ================================================
+   GAMESTORE - APPLE-INSPIRED DESIGN SYSTEM
+   Clean, minimal, high contrast
+   ================================================ */
+
+@theme {
+  /* Typography - SF Pro inspired */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SF Mono", SFMono-Regular, ui-monospace, monospace;
+
+  /* Border Radius - Apple-like softness */
+  --radius: 0.625rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.5rem;
+
+  /* Custom Colors */
+  --color-design-gold: #B8860B;
+  --color-apple-blue: #007AFF;
+
+  /* Animations */
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+  --animate-fade-in: fade-in 0.3s ease-out;
+  --animate-slide-up: slide-up 0.4s ease-out;
+}
+
+/* ================================================
+   LIGHT MODE (DEFAULT)
+   Apple-inspired bright and clean
+   ================================================ */
+:root {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 0%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 0%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 0%;
+  --primary: 0 0% 0%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 96%;
+  --secondary-foreground: 0 0% 9%;
+  --muted: 0 0% 96%;
+  --muted-foreground: 0 0% 45%;
+  --accent: 43 96% 38%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 0 0% 90%;
+  --input: 0 0% 90%;
+  --ring: 0 0% 0%;
+  --chart-1: 12 76% 61%;
+  --chart-2: 173 58% 39%;
+  --chart-3: 197 37% 24%;
+  --chart-4: 43 74% 66%;
+  --chart-5: 27 87% 67%;
+}
+
+/* ================================================
+   DARK MODE
+   Apple-inspired dark theme with high contrast
+   ================================================ */
+.dark {
+  --background: 0 0% 0%;
+  --foreground: 0 0% 100%;
+  --card: 0 0% 7%;
+  --card-foreground: 0 0% 100%;
+  --popover: 0 0% 10%;
+  --popover-foreground: 0 0% 100%;
+  --primary: 43 96% 56%;
+  --primary-foreground: 0 0% 0%;
+  --secondary: 0 0% 15%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 0 0% 15%;
+  --muted-foreground: 0 0% 65%;
+  --accent: 43 96% 56%;
+  --accent-foreground: 0 0% 0%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 0 0% 20%;
+  --input: 0 0% 20%;
+  --ring: 43 96% 56%;
+  --chart-1: 220 70% 50%;
+  --chart-2: 160 60% 45%;
+  --chart-3: 30 80% 55%;
+  --chart-4: 280 65% 60%;
+  --chart-5: 340 75% 55%;
+}
+
+/* ================================================
+   BASE STYLES
+   ================================================ */
+* {
+  border-color: hsl(var(--border));
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* ================================================
+   APPLE-STYLE UTILITIES
+   ================================================ */
+
+/* Card with subtle shadow (Apple-like) */
+.card-surface {
+  background-color: hsl(var(--card));
+  border-radius: 1rem;
+  border: 1px solid hsl(var(--border) / 0.5);
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
+}
+
+.dark .card-surface {
+  background-color: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  box-shadow: none;
+}
+
+/* Glassmorphism - Apple-style */
+.glass {
+  background: hsl(var(--background) / 0.8);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.dark .glass {
+  background: hsl(0 0% 0% / 0.8);
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+/* Gold accent button */
+.btn-gold {
+  background-color: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+  font-weight: 600;
+}
+
+.btn-gold:hover {
+  filter: brightness(0.9);
+}
+
+/* Custom scrollbar - minimal Apple style */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* ================================================
+   SELECT/DROPDOWN FIX FOR CONTRAST & OVERFLOW
+   ================================================ */
+[data-radix-popper-content-wrapper] {
+  --tw-bg-opacity: 1 !important;
+  z-index: 50 !important;
+  /* Force high z-index */
+}
+
+/* Ensure dropdown items have proper contrast and solid background */
+[role="listbox"],
+[role="menu"] {
+  background-color: hsl(var(--popover)) !important;
+  border: 1px solid hsl(var(--border));
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  overflow: hidden;
+  /* Prevent content bleeding */
+}
+
+[role="listbox"] [role="option"],
+[role="menu"] [role="menuitem"] {
+  color: hsl(var(--popover-foreground)) !important;
+  cursor: pointer;
+}
+
+[role="listbox"] [role="option"]:hover,
+[role="menu"] [role="menuitem"]:hover {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+/* ================================================
+   ANIMATIONS
+   ================================================ */
+@keyframes accordion-down {
+  from {
+    height: 0;
+  }
+
+  to {
+    height: var(--radix-accordion-content-height);
+  }
+}
+
+@keyframes accordion-up {
+  from {
+    height: var(--radix-accordion-content-height);
+  }
+
+  to {
+    height: 0;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Selection styling */
+::selection {
+  background-color: hsl(var(--accent) / 0.3);
+  color: hsl(var(--foreground));
+}
+
+/* Focus visible styling - Apple blue ring */
+:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+/* ================================================
+   SPECIFIC COMPONENT FIXES
+   ================================================ */
+
+/* Fix for Select component in dark mode */
+.dark [data-radix-select-content],
+.dark [data-radix-dropdown-menu-content] {
+  background-color: hsl(0 0% 10%) !important;
+  border-color: hsl(0 0% 25%) !important;
+  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.5);
+}
+
+/* Fix for SelectItem hover states */
+.dark [data-radix-select-item]:hover,
+.dark [data-radix-select-item][data-highlighted] {
+  background-color: hsl(0 0% 20%) !important;
+  color: white !important;
+}
+
+/* Ensure proper text color in popovers */
+.dark [data-radix-popper-content-wrapper] * {
+  color: white;
+}
+
+.dark [data-radix-select-item] {
+  color: hsl(0 0% 100%) !important;
+}
+
+/* Light mode select fixes for contrast */
+[data-radix-select-content],
+[data-radix-dropdown-menu-content] {
+  background-color: hsl(var(--popover)) !important;
+  color: hsl(var(--popover-foreground)) !important;
+  border: 1px solid hsl(var(--border) / 0.5);
+}

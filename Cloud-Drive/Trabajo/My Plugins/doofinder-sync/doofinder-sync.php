@@ -23,7 +23,7 @@ if (!defined('DSYNC_GITHUB_OWNER')) {
 }
 
 if (!defined('DSYNC_GITHUB_REPO')) {
-    define('DSYNC_GITHUB_REPO', 'doofinder-sync');
+    define('DSYNC_GITHUB_REPO', 'doofinder-synch');
 }
 
 if (!defined('DSYNC_GITHUB_BRANCH')) {
