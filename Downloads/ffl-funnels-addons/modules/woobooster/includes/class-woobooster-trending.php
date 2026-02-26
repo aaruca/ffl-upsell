@@ -39,7 +39,7 @@ class WooBooster_Trending
 
         // Use the WooCommerce order product lookup table if available.
         $lookup_table = $wpdb->prefix . 'wc_order_product_lookup';
-        $has_lookup = $wpdb->get_var("SHOW TABLES LIKE '{$lookup_table}'") === $lookup_table;
+        $has_lookup = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $lookup_table)) === $lookup_table;
 
         $product_sales = array();
 
@@ -106,20 +106,37 @@ class WooBooster_Trending
             }
         }
 
-        // Group products by category and store as transients.
+        // Group products by category — single SQL JOIN instead of N+1 queries.
         $categories_indexed = 0;
         $category_products = array();
 
-        foreach ($product_sales as $product_id => $qty) {
-            $cats = wp_get_post_terms($product_id, 'product_cat', array('fields' => 'ids'));
-            if (is_wp_error($cats) || empty($cats)) {
-                continue;
-            }
-            foreach ($cats as $cat_id) {
+        if (!empty($product_sales)) {
+            global $wpdb;
+            $product_ids = array_keys($product_sales);
+            $placeholders = implode(',', array_fill(0, count($product_ids), '%d'));
+
+            // Single query: fetch product-category relationships for all products at once.
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+            $cat_relationships = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT tt.term_id, p.ID as product_id
+                    FROM {$wpdb->posts} p
+                    INNER JOIN {$wpdb->term_relationships} tr ON p.ID = tr.object_id
+                    INNER JOIN {$wpdb->term_taxonomy} tt ON tr.term_taxonomy_id = tt.term_taxonomy_id
+                    WHERE p.ID IN ({$placeholders}) AND tt.taxonomy = %s",
+                    array_merge($product_ids, array('product_cat'))
+                )
+            );
+
+            foreach ($cat_relationships as $row) {
+                $product_id = absint($row->product_id);
+                $cat_id = absint($row->term_id);
                 if (!isset($category_products[$cat_id])) {
                     $category_products[$cat_id] = array();
                 }
-                $category_products[$cat_id][$product_id] = $qty;
+                if (isset($product_sales[$product_id])) {
+                    $category_products[$cat_id][$product_id] = $product_sales[$product_id];
+                }
             }
         }
 

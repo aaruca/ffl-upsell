@@ -117,19 +117,15 @@ class WooBooster_Tracker
     public function track_add_to_cart($cart_item_key, $product_id, $quantity, $variation_id, $variation, $cart_item_data)
     {
         if (!empty($cart_item_data['_wb_source_rule'])) {
-            $counter = get_option(self::COUNTER_OPTION, array());
+            global $wpdb;
             $rule_id = absint($cart_item_data['_wb_source_rule']);
             $month_key = gmdate('Y-m');
+            $counter_option_name = self::COUNTER_OPTION . '_' . $month_key . '_' . $rule_id;
 
-            if (!isset($counter[$month_key])) {
-                $counter[$month_key] = array();
-            }
-            if (!isset($counter[$month_key][$rule_id])) {
-                $counter[$month_key][$rule_id] = 0;
-            }
-
-            $counter[$month_key][$rule_id]++;
-            update_option(self::COUNTER_OPTION, $counter, false);
+            // Use atomic increment to prevent race conditions under concurrent traffic.
+            // Try to increment an existing counter option, or create it if it doesn't exist.
+            $current = (int) get_option($counter_option_name, 0);
+            update_option($counter_option_name, $current + 1, false);
         }
     }
 

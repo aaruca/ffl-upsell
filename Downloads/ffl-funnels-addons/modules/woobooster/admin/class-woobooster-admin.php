@@ -288,18 +288,18 @@ class WooBooster_Admin
                                 $cp = $last_build['copurchase'];
                                 $parts[] = sprintf(
                                     __('Co-purchase: %1$d products in %2$ss (%3$s)', 'ffl-funnels-addons'),
-                                    $cp['products'],
-                                    $cp['time'],
-                                    $cp['date']
+                                    absint($cp['products']),
+                                    esc_html($cp['time']),
+                                    esc_html($cp['date'])
                                 );
                             }
                             if (!empty($last_build['trending'])) {
                                 $tr = $last_build['trending'];
                                 $parts[] = sprintf(
                                     __('Trending: %1$d categories in %2$ss (%3$s)', 'ffl-funnels-addons'),
-                                    $tr['categories'],
-                                    $tr['time'],
-                                    $tr['date']
+                                    absint($tr['categories']),
+                                    esc_html($tr['time']),
+                                    esc_html($tr['date'])
                                 );
                             }
                             if (!empty($parts)) {
@@ -555,6 +555,15 @@ class WooBooster_Admin
             wp_send_json_error(array('message' => __('Invalid JSON file.', 'ffl-funnels-addons')));
         }
 
+        $max_import = 500;
+        if (count($data['rules']) > $max_import) {
+            wp_send_json_error(array('message' => sprintf(
+                /* translators: %d: maximum number of rules allowed per import */
+                __('Maximum %d rules per import.', 'ffl-funnels-addons'),
+                $max_import
+            )));
+        }
+
         $count = 0;
         foreach ($data['rules'] as $rule_data) {
             $conditions = isset($rule_data['conditions']) ? $rule_data['conditions'] : array();
@@ -741,6 +750,15 @@ class WooBooster_Admin
             wp_send_json_error(array('message' => __('No message provided.', 'ffl-funnels-addons')));
         }
 
+        // Filter out injected system/tool messages from client-supplied history.
+        // Only allow user and assistant roles that were previously in conversation.
+        $chat_history = array_values(array_filter($chat_history, function($msg) {
+            return is_array($msg)
+                && isset($msg['role'], $msg['content'])
+                && in_array($msg['role'], array('user', 'assistant'), true)
+                && is_string($msg['content']);
+        }));
+
         $options = get_option('woobooster_settings', array());
         $api_key = isset($options['openai_key']) ? $options['openai_key'] : '';
         $tavily_key = isset($options['tavily_key']) ? $options['tavily_key'] : '';
@@ -764,6 +782,7 @@ class WooBooster_Admin
         $steps = array();
         $max_turns = 8;
         $turn = 0;
+        $assistant_message = array('content' => '');
 
         while ($turn < $max_turns) {
             $turn++;
@@ -780,14 +799,16 @@ class WooBooster_Admin
             ));
 
             if (is_wp_error($response)) {
-                wp_send_json_error(array('message' => $response->get_error_message(), 'steps' => $steps));
+                error_log('WooBooster AI: WP_Error — ' . $response->get_error_message());
+                wp_send_json_error(array('message' => __('AI service error. Please try again.', 'ffl-funnels-addons'), 'steps' => $steps));
             }
 
             $data = json_decode(wp_remote_retrieve_body($response), true);
 
             if (empty($data) || isset($data['error'])) {
-                $err_msg = isset($data['error']['message']) ? $data['error']['message'] : __('Invalid response from OpenAI.', 'ffl-funnels-addons');
-                wp_send_json_error(array('message' => $err_msg, 'steps' => $steps));
+                $err_msg = isset($data['error']['message']) ? $data['error']['message'] : 'Unknown API error';
+                error_log('WooBooster AI: API error — ' . $err_msg);
+                wp_send_json_error(array('message' => __('AI service error. Please try again.', 'ffl-funnels-addons'), 'steps' => $steps));
             }
 
             $assistant_message = $data['choices'][0]['message'];
@@ -838,6 +859,14 @@ class WooBooster_Admin
                 }
             }
             // Loop continues — OpenAI will get all tool results and decide next step.
+        }
+
+        // If we hit max turns without getting a final text response, return error.
+        if ($turn >= $max_turns && !empty($assistant_message['tool_calls'])) {
+            wp_send_json_error(array(
+                'message' => __('AI reached the maximum turn limit without providing a final response. Please try again.', 'ffl-funnels-addons'),
+                'steps' => $steps,
+            ));
         }
 
         // Return the final text response from the AI (just a message, no auto-creation).
@@ -1184,7 +1213,7 @@ Common product types: firearms (handguns, rifles, shotguns), ammunition, holster
     private function ai_tool_get_rules(): string
     {
         require_once WOOBOOSTER_PATH . 'includes/class-woobooster-rule.php';
-        $rules = WooBooster_Rule::get_all_rules();
+        $rules = WooBooster_Rule::get_all(array('limit' => 100));
         $summary = array();
 
         foreach ($rules as $rule) {

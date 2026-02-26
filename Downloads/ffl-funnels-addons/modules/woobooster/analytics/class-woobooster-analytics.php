@@ -78,10 +78,11 @@ class WooBooster_Analytics
         $to = isset($_GET['wb_to']) ? sanitize_text_field($_GET['wb_to']) : '';
         // phpcs:enable
 
-        if (!$from || !strtotime($from)) {
+        // Validate date format before using (prevent strtotime abuse with relative expressions).
+        if (!$from || !DateTime::createFromFormat('Y-m-d', $from)) {
             $from = gmdate('Y-m-d', strtotime('-30 days'));
         }
-        if (!$to || !strtotime($to)) {
+        if (!$to || !DateTime::createFromFormat('Y-m-d', $to)) {
             $to = gmdate('Y-m-d');
         }
 
@@ -129,22 +130,34 @@ class WooBooster_Analytics
         $rules_data = array();
         $products_data = array();
 
-        // Single query — all completed/processing orders in range.
-        $orders = wc_get_orders(array(
-            'status' => array('wc-completed', 'wc-processing'),
-            'date_created' => $date_from . '...' . $date_to . ' 23:59:59',
-            'limit' => -1,
-            'return' => 'ids',
-        ));
+        // Paginated query — all completed/processing orders in range.
+        // Avoids N+1 by fetching order objects directly instead of IDs.
+        $offset = 0;
+        $page_size = 500;
+        $all_processed = false;
 
-        foreach ($orders as $order_id) {
-            $order = wc_get_order($order_id);
-            if (!$order) {
-                continue;
+        while (!$all_processed) {
+            $orders = wc_get_orders(array(
+                'status' => array('wc-completed', 'wc-processing'),
+                'date_created' => $date_from . '...' . $date_to . ' 23:59:59',
+                'limit' => $page_size,
+                'offset' => $offset,
+                'return' => 'objects',
+            ));
+
+            if (empty($orders)) {
+                $all_processed = true;
+                break;
             }
 
+            foreach ($orders as $order) {
+
             $stats['total_orders']++;
-            $day_key = $order->get_date_created()->format('Y-m-d');
+            $created = $order->get_date_created();
+            if (!$created) {
+                continue;
+            }
+            $day_key = $created->format('Y-m-d');
             if (isset($day_totals[$day_key])) {
                 $day_totals[$day_key] += (float) $order->get_subtotal();
             }
@@ -194,6 +207,9 @@ class WooBooster_Analytics
             if ($order_has_wb) {
                 $stats['wb_orders']++;
             }
+            }
+
+            $offset += $page_size;
         }
 
         // Build daily arrays.

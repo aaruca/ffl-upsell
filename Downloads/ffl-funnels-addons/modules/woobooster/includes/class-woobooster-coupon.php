@@ -28,14 +28,24 @@ class WooBooster_Coupon
         // Auto-apply/remove coupons when cart is updated.
         add_action('woocommerce_before_calculate_totals', array($this, 'maybe_apply_coupons'), 20);
 
-        // Show notice when coupon is auto-applied.
+        // Show notice when coupon is auto-applied (fires synchronously on the
+        // request where apply_coupon() is called).
         add_action('woocommerce_applied_coupon', array($this, 'show_coupon_notice'));
+
+        // Re-display auto-coupon notice on the cart page on subsequent requests.
+        add_action('woocommerce_before_cart', array($this, 'maybe_show_cart_notices'));
 
         // Clean up session on cart empty.
         add_action('woocommerce_cart_emptied', array($this, 'clear_session'));
 
-        // Force auto-applied coupons to be considered valid to prevent checkout errors.
+        // Force auto-applied coupons valid to prevent checkout errors.
         add_filter('woocommerce_coupon_is_valid', array($this, 'force_auto_coupons_valid'), 10, 3);
+
+        // Suppress WC error notices for auto-applied coupons managed by WooBooster.
+        add_filter('woocommerce_coupon_error', array($this, 'suppress_auto_coupon_error'), 10, 3);
+
+        // Show a pre-cart promotional message on the single product page.
+        add_action('woocommerce_single_product_summary', array($this, 'maybe_show_product_page_notice'), 25);
     }
 
     /**
@@ -81,7 +91,14 @@ class WooBooster_Coupon
             }
 
             if (!$cart->has_discount($code)) {
+                // Write session FIRST so show_coupon_notice() can read it when
+                // woocommerce_applied_coupon fires synchronously inside apply_coupon().
+                $auto_coupons[$coupon_id] = array('code' => $code, 'message' => $message);
+                $session->set(self::SESSION_KEY, $auto_coupons);
                 $cart->apply_coupon($code);
+            } elseif (!isset($auto_coupons[$coupon_id])) {
+                // Coupon already in cart (persistent cart) but session expired.
+                // Re-register so force_auto_coupons_valid() can protect it at checkout.
                 $auto_coupons[$coupon_id] = array('code' => $code, 'message' => $message);
             }
         }
@@ -133,11 +150,8 @@ class WooBooster_Coupon
                 continue;
             }
 
-            // Get product terms for condition matching.
-            $terms = wp_get_post_terms($product_id, get_object_taxonomies('product'), array('fields' => 'all'));
-            if (is_wp_error($terms)) {
-                $terms = array();
-            }
+            // Get product terms from request-scoped cache to avoid N+1 queries.
+            $terms = $this->get_cached_product_terms($product_id);
 
             foreach ($terms as $term) {
                 $cart_keys[] = sanitize_key($term->taxonomy) . ':' . sanitize_text_field($term->slug);
@@ -149,8 +163,8 @@ class WooBooster_Coupon
 
         $cart_keys = array_unique($cart_keys);
 
-        // Match against rules.
-        $now = current_time('mysql');
+        // Match against rules using UTC timestamps for consistent scheduling.
+        $now = current_time('mysql', true);
         foreach ($rules as $rule) {
             // Check scheduling dates — skip if rule is outside its active window.
             if (!empty($rule->start_date) && $now < $rule->start_date) {
@@ -199,6 +213,24 @@ class WooBooster_Coupon
     }
 
     /**
+     * Get product terms with request-scoped caching to avoid N+1 queries.
+     *
+     * @param int $product_id Product ID.
+     * @return array Array of term objects.
+     */
+    private function get_cached_product_terms($product_id)
+    {
+        static $term_cache = array();
+
+        if (!isset($term_cache[$product_id])) {
+            $terms = wp_get_post_terms($product_id, get_object_taxonomies('product'), array('fields' => 'all'));
+            $term_cache[$product_id] = is_wp_error($terms) ? array() : $terms;
+        }
+
+        return $term_cache[$product_id];
+    }
+
+    /**
      * Check if a rule's conditions match items currently in the cart.
      *
      * @param object $rule      The rule object.
@@ -223,10 +255,8 @@ class WooBooster_Coupon
                 continue;
             }
 
-            $terms = wp_get_post_terms($product_id, get_object_taxonomies('product'), array('fields' => 'all'));
-            if (is_wp_error($terms)) {
-                $terms = array();
-            }
+            // Get product terms from request-scoped cache to avoid N+1 queries.
+            $terms = $this->get_cached_product_terms($product_id);
 
             $item_keys = array();
             $item_cat_ids = array();
@@ -434,6 +464,72 @@ class WooBooster_Coupon
     }
 
     /**
+     * Re-display auto-coupon notices on the cart page.
+     *
+     * woocommerce_applied_coupon only fires on the request when apply_coupon()
+     * is called. This method runs on woocommerce_before_cart to show the notice
+     * on subsequent page loads as long as the coupon is still in the cart.
+     *
+     * Skips coupons that already have a success notice queued (avoids duplicates
+     * on the very first request when show_coupon_notice() already ran).
+     */
+    public function maybe_show_cart_notices()
+    {
+        $session = WC()->session;
+        if (!$session) {
+            return;
+        }
+
+        $cart = WC()->cart;
+        if (!$cart) {
+            return;
+        }
+
+        $auto_coupons = $session->get(self::SESSION_KEY, array());
+        if (empty($auto_coupons)) {
+            return;
+        }
+
+        // Collect codes that already have a queued success notice so we don't
+        // duplicate the message on the request when apply_coupon() just fired.
+        $already_noticed = array();
+        $existing_notices = wc_get_notices('success');
+        foreach ($existing_notices as $notice) {
+            $text = is_array($notice) ? ($notice['notice'] ?? '') : $notice;
+            $already_noticed[] = strtolower(wp_strip_all_tags($text));
+        }
+
+        foreach ($auto_coupons as $coupon_id => $data) {
+            $code    = is_array($data) ? $data['code'] : $data;
+            $message = is_array($data) && !empty($data['message']) ? $data['message'] : '';
+
+            // Only show if the coupon is still applied in the cart.
+            if (!$cart->has_discount($code)) {
+                continue;
+            }
+
+            // Build the notice text we would display.
+            if (!empty($message)) {
+                $notice_text = wp_kses_post($message);
+            } else {
+                $notice_text = sprintf(
+                    /* translators: %s: coupon code */
+                    __('Coupon "%s" has been automatically applied based on your cart!', 'woobooster'),
+                    esc_html(strtoupper($code))
+                );
+            }
+
+            // Skip if an identical notice is already queued.
+            $notice_plain = strtolower(wp_strip_all_tags($notice_text));
+            if (in_array($notice_plain, $already_noticed, true)) {
+                continue;
+            }
+
+            wc_add_notice($notice_text, 'success');
+        }
+    }
+
+    /**
      * Clear auto-coupon tracking when cart is emptied.
      */
     public function clear_session()
@@ -516,5 +612,203 @@ class WooBooster_Coupon
         }
 
         return true;
+    }
+
+    /**
+     * Suppress WooCommerce coupon error notices for auto-applied coupons.
+     *
+     * When WC validates coupons at checkout and finds a product restriction not
+     * met, it fires woocommerce_coupon_error before woocommerce_coupon_is_valid.
+     * This filter intercepts those notices and returns an empty string for any
+     * coupon that WooBooster is actively managing (so the customer never sees a
+     * confusing "Coupon not applicable" error on a coupon they never manually
+     * entered).
+     *
+     * @param string    $error   The error message WC is about to display.
+     * @param int       $err_code WC error code constant.
+     * @param WC_Coupon $coupon  The coupon object.
+     * @return string Empty string to suppress, or original error string.
+     */
+    public function suppress_auto_coupon_error($error, $err_code, $coupon)
+    {
+        $session = WC()->session;
+        if (!$session) {
+            return $error;
+        }
+
+        $auto_coupons = $session->get(self::SESSION_KEY, array());
+        if (empty($auto_coupons)) {
+            return $error;
+        }
+
+        $coupon_id = $coupon->get_id();
+
+        if (isset($auto_coupons[$coupon_id])) {
+            // Returning an empty string tells WC not to add the notice.
+            return '';
+        }
+
+        return $error;
+    }
+
+    /**
+     * Display a promotional coupon notice on the single product page.
+     *
+     * Runs at woocommerce_single_product_summary priority 25 (after the product
+     * title at 5 and price at 10, before the excerpt at 20... well, after it,
+     * which places the notice just above or alongside the add-to-cart form).
+     *
+     * Only shows when there is at least one active rule whose conditions match
+     * the current product AND whose action is 'apply_coupon' with a custom
+     * message set.
+     */
+    public function maybe_show_product_page_notice()
+    {
+        global $post;
+
+        if (!$post || !is_singular('product')) {
+            return;
+        }
+
+        $product_id = absint($post->ID);
+        if (!$product_id) {
+            return;
+        }
+
+        $messages = $this->get_product_coupon_messages($product_id);
+        if (empty($messages)) {
+            return;
+        }
+
+        foreach ($messages as $message) {
+            // Output an inline styled div. We deliberately avoid wc_add_notice()
+            // here because that queues a notice for the global notice area which
+            // appears at the top of the page — we want it inline with the product
+            // summary. A simple, unstyled div keeps the output theme-agnostic.
+            echo '<div class="woobooster-product-coupon-notice" style="'
+                . 'background:#f0fff4;border:1px solid #68d391;border-radius:4px;'
+                . 'padding:10px 14px;margin:10px 0;font-size:.95em;color:#276749;">'
+                . wp_kses_post($message)
+                . '</div>';
+        }
+    }
+
+    /**
+     * Get coupon promotional messages for a specific product.
+     *
+     * Loads all active rules that have 'apply_coupon' actions with a custom
+     * message, then checks whether any condition group in the rule matches
+     * the given product (by specific_product ID, category slug, attribute
+     * term slug, etc.).
+     *
+     * @param int $product_id The product ID to check.
+     * @return array Array of message strings (may be empty).
+     */
+    private function get_product_coupon_messages($product_id)
+    {
+        $messages = array();
+
+        $rules = $this->get_coupon_rules();
+        if (empty($rules)) {
+            return $messages;
+        }
+
+        // Build condition keys for this product once (same logic as get_matching_coupon_ids).
+        $product_keys = array();
+        $terms = wp_get_post_terms($product_id, get_object_taxonomies('product'), array('fields' => 'all'));
+        if (!is_wp_error($terms)) {
+            foreach ($terms as $term) {
+                $product_keys[] = sanitize_key($term->taxonomy) . ':' . sanitize_text_field($term->slug);
+            }
+        }
+        $product_keys[] = 'specific_product:' . $product_id;
+
+        $now = current_time('mysql');
+
+        foreach ($rules as $rule) {
+            // Respect scheduling.
+            if (!empty($rule->start_date) && $now < $rule->start_date) {
+                continue;
+            }
+            if (!empty($rule->end_date) && $now > $rule->end_date) {
+                continue;
+            }
+
+            // Check if ANY condition group in this rule matches the product.
+            $conditions = WooBooster_Rule::get_conditions($rule->id);
+            if (empty($conditions)) {
+                continue;
+            }
+
+            $rule_matches = false;
+            foreach ($conditions as $group_conditions) {
+                $group_match = true;
+                foreach ($group_conditions as $cond) {
+                    $attr     = $cond->condition_attribute;
+                    $value    = $cond->condition_value;
+                    $operator = isset($cond->condition_operator) ? $cond->condition_operator : 'equals';
+
+                    $item_matches = false;
+                    if ('specific_product' === $attr) {
+                        $ids = array_filter(array_map('absint', explode(',', $value)));
+                        $item_matches = in_array($product_id, $ids, true);
+                    } else {
+                        $key = sanitize_key($attr) . ':' . sanitize_text_field($value);
+                        $item_matches = in_array($key, $product_keys, true);
+
+                        if (!$item_matches && !empty($cond->include_children)) {
+                            foreach ($product_keys as $pk) {
+                                $parts = explode(':', $pk, 2);
+                                if ($parts[0] === $attr) {
+                                    $child_term  = get_term_by('slug', $parts[1], $attr);
+                                    $parent_term = get_term_by('slug', $value, $attr);
+                                    if ($child_term && $parent_term && !is_wp_error($child_term) && !is_wp_error($parent_term)) {
+                                        if (term_is_ancestor_of($parent_term->term_id, $child_term->term_id, $attr)) {
+                                            $item_matches = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if ('not_equals' === $operator) {
+                        $item_matches = !$item_matches;
+                    }
+
+                    if (!$item_matches) {
+                        $group_match = false;
+                        break;
+                    }
+                }
+
+                if ($group_match) {
+                    $rule_matches = true;
+                    break;
+                }
+            }
+
+            if (!$rule_matches) {
+                continue;
+            }
+
+            // Rule matches — collect messages from 'apply_coupon' actions.
+            $action_groups = WooBooster_Rule::get_actions($rule->id);
+            foreach ($action_groups as $group_actions) {
+                foreach ($group_actions as $action) {
+                    if ('apply_coupon' === $action->action_source
+                        && !empty($action->action_coupon_message)
+                    ) {
+                        $msg = trim($action->action_coupon_message);
+                        if ($msg !== '' && !in_array($msg, $messages, true)) {
+                            $messages[] = $msg;
+                        }
+                    }
+                }
+            }
+        }
+
+        return $messages;
     }
 }

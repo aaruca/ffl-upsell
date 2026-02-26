@@ -44,7 +44,7 @@ class WooBooster_Copurchase
 
         // Use HPOS table if available, otherwise fall back to posts.
         $hpos_table = $wpdb->prefix . 'wc_orders';
-        $use_hpos = $wpdb->get_var("SHOW TABLES LIKE '{$hpos_table}'") === $hpos_table;
+        $use_hpos = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $hpos_table)) === $hpos_table;
 
         $pairs = array();
         $offset = 0;
